@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   MantineReactTable,
   useMantineReactTable,
   type MRT_ColumnDef,
 } from "mantine-react-table";
 import { Badge, Container, Title } from "@mantine/core";
+import { CsvUpload } from "./csv-upload";
 
 interface Listing {
   id: number;
@@ -59,6 +60,8 @@ const mockListings: Listing[] = [
 ];
 
 export function ListingsTable() {
+  const [data, setData] = useState<Listing[]>(mockListings);
+
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -107,7 +110,7 @@ export function ListingsTable() {
 
   const table = useMantineReactTable({
     columns,
-    data: mockListings,
+    data: data,
     enableRowNumbers: true,
   });
 
@@ -116,6 +119,7 @@ export function ListingsTable() {
       <Title order={2} mb="lg">
         Available Listings
       </Title>
+      <CsvUpload onDataLoaded={setData} />
       <MantineReactTable table={table} />
     </Container>
   );
