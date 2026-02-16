@@ -11,6 +11,12 @@ on:
         type: string
         default: "livscore"
 
+      build-dir-name:
+        description: "The name of the directory where the build is (i.e. dist, out, etc...)"
+        required: true
+        type: string
+        default: "dist"
+
 jobs:
   deploy:
     name: deploy release ${{ github.ref_name }}
@@ -23,12 +29,12 @@ jobs:
           name: livscore-build
           workflow_conclusion: success
           branch: ${{ github.ref_name }}
-          path: dist/
+          path: ${{ inputs.build-dir-name }}
 
       - name: Deploy to Cloudflare
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy out --project-name=${{ inputs.cloudflare_project_name }}
+          command: pages deploy ${{ inputs.build-dir-name }} --project-name=${{ inputs.cloudflare_project_name }}
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
