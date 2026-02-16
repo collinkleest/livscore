@@ -1,126 +1,150 @@
-import { useMemo, useState } from "react";
+import { useState, useCallback } from "react";
 import {
   MantineReactTable,
-  useMantineReactTable,
   type MRT_ColumnDef,
+  type MRT_Cell,
 } from "mantine-react-table";
-import { Badge, Container, Title } from "@mantine/core";
+import { Badge, Container, Title, Text } from "@mantine/core";
 import { CsvUpload } from "./csv-upload";
 
-interface Listing {
-  id: number;
-  address: string;
-  price: number;
-  beds: number;
-  baths: number;
-  sqft: number;
-}
+// Since we don't know the exact shape, use Record<string, any>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Listing = Record<string, any>;
 
-const mockListings: Listing[] = [
-  {
-    id: 1,
-    address: "123 Oak Street, San Francisco, CA",
-    price: 1250000,
-    beds: 3,
-    baths: 2,
-    sqft: 2100,
-  },
-  {
-    id: 2,
-    address: "456 Maple Avenue, Oakland, CA",
-    price: 850000,
-    beds: 2,
-    baths: 1,
-    sqft: 1400,
-  },
-  {
-    id: 3,
-    address: "789 Pine Road, Berkeley, CA",
-    price: 1500000,
-    beds: 4,
-    baths: 3,
-    sqft: 2800,
-  },
-  {
-    id: 4,
-    address: "321 Elm Boulevard, San Jose, CA",
-    price: 950000,
-    beds: 3,
-    baths: 2,
-    sqft: 1800,
-  },
-  {
-    id: 5,
-    address: "654 Cedar Lane, Palo Alto, CA",
-    price: 2100000,
-    beds: 4,
-    baths: 3,
-    sqft: 3200,
-  },
-];
+// -------------------------------------------------------------------
+// helpers moved outside component to avoid stale closures
+// -------------------------------------------------------------------
+
+// Helper to format currency
+const formatCurrency = (value: number) => {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
+};
+
+// Helper to detect column type based on data
+const detectColumnType = (
+  header: string,
+  sampleData: Listing[],
+): "currency" | "number" | "date" | "string" => {
+  let isCurrency = true;
+  let isNumber = true;
+  let isDate = true;
+
+  let samplesChecked = 0;
+
+  for (const row of sampleData) {
+    const val = row[header];
+    if (val === undefined || val === null || val === "") continue;
+    samplesChecked++;
+
+    const strVal = String(val).trim();
+
+    // Check currency
+    if (!/^\$?\s?[\d,]+(\.\d+)?$/.test(strVal)) {
+      isCurrency = false;
+    }
+    // check number (allow commas)
+    if (isNaN(Number(strVal.replace(/[$,]/g, "")))) {
+      isNumber = false;
+      isCurrency = false; // if not number, not currency
+    }
+
+    // Check date (simple check)
+    if (isNaN(Date.parse(strVal))) {
+      isDate = false;
+    }
+  }
+
+  if (samplesChecked === 0) return "string";
+
+  if (isCurrency && header.toLowerCase().includes("price")) return "currency";
+  if (isNumber) return "number";
+  if (isDate) return "date";
+
+  return "string";
+};
 
 export function ListingsTable() {
-  const [data, setData] = useState<Listing[]>(mockListings);
+  const [data, setData] = useState<Listing[]>([]);
+  const [columns, setColumns] = useState<MRT_ColumnDef<Listing>[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(price);
-  };
+  const handleDataLoaded = useCallback(
+    (loadedData: Listing[], headers: string[]) => {
+      console.log("Data loaded from CSV:", loadedData);
+      console.log("Headers:", headers);
+      setLoading(true);
 
-  const columns = useMemo<MRT_ColumnDef<Listing>[]>(
-    () => [
-      {
-        accessorKey: "address",
-        header: "Address",
-        size: 200,
-      },
-      {
-        accessorKey: "price",
-        header: "Price",
-        Cell: ({ cell }) => (
-          <Badge color="green" variant="light">
-            {formatPrice(cell.getValue<number>())}
-          </Badge>
-        ),
-      },
-      {
-        accessorKey: "beds",
-        header: "Bedrooms",
-        size: 100,
-        Cell: ({ cell }) => `${cell.getValue()} bd`,
-      },
-      {
-        accessorKey: "baths",
-        header: "Bathrooms",
-        size: 100,
-        Cell: ({ cell }) => `${cell.getValue()} ba`,
-      },
-      {
-        accessorKey: "sqft",
-        header: "Square Feet",
-        Cell: ({ cell }) => `${cell.getValue<number>().toLocaleString()} sq ft`,
-      },
-    ],
+      const newColumns: MRT_ColumnDef<Listing>[] = headers.map((header) => {
+        const type = detectColumnType(header, loadedData.slice(0, 50));
+
+        return {
+          accessorKey: header,
+          header: header,
+          filterVariant:
+            type === "number" || type === "currency" ? "range" : "text",
+          Cell: ({ cell }: { cell: MRT_Cell<Listing> }) => {
+            const val = cell.getValue<string | number>();
+            if (val === null || val === undefined) return "";
+
+            if (type === "currency") {
+              const num = Number(String(val).replace(/[$,]/g, ""));
+              if (!isNaN(num)) {
+                return (
+                  <Badge color="green" variant="light">
+                    {formatCurrency(num)}
+                  </Badge>
+                );
+              }
+            }
+
+            if (type === "date") {
+              try {
+                return new Date(String(val)).toLocaleDateString();
+              } catch {
+                return String(val);
+              }
+            }
+
+            return String(val);
+          },
+        };
+      });
+
+      setColumns(newColumns);
+      setData(loadedData);
+      setLoading(false);
+    },
     [],
   );
 
-  const table = useMantineReactTable({
-    columns,
-    data: data,
-    enableRowNumbers: true,
-  });
-
   return (
-    <Container size="lg" py="xl">
+    <Container size="xl" py="xl">
       <Title order={2} mb="lg">
-        Available Listings
+        House Scoring & Analysis
       </Title>
-      <CsvUpload onDataLoaded={setData} />
-      <MantineReactTable table={table} />
+
+      <CsvUpload onDataLoaded={handleDataLoaded} />
+
+      {data.length > 0 ? (
+        <>
+          <MantineReactTable
+            columns={columns}
+            data={data}
+            enableRowNumbers
+            state={{ showProgressBars: loading }}
+            initialState={{ density: "xs" }}
+          />
+        </>
+      ) : (
+        <Text c="dimmed" fs="italic" mt="xl" ta="center">
+          Upload a CSV file to view listings.
+        </Text>
+      )}
     </Container>
   );
 }

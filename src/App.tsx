@@ -1,11 +1,13 @@
 import "./App.css";
-import { ListingsTable } from "./_components";
+import { ListingsTable, ThemeToolbar } from "./_components";
+import { Stack } from "@mantine/core";
 
 function App() {
   return (
-    <>
+    <Stack>
+      <ThemeToolbar />
       <ListingsTable />
-    </>
+    </Stack>
   );
 }
 
