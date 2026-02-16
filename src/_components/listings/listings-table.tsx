@@ -3,6 +3,8 @@ import {
   MantineReactTable,
   type MRT_ColumnDef,
   type MRT_Cell,
+  type MRT_ColumnFiltersState,
+  type MRT_SortingState,
 } from "mantine-react-table";
 import { Badge, Container, Title, Text } from "@mantine/core";
 import { CsvUpload } from "./csv-upload";
@@ -72,6 +74,10 @@ export function ListingsTable() {
   const [data, setData] = useState<Listing[]>([]);
   const [columns, setColumns] = useState<MRT_ColumnDef<Listing>[]>([]);
   const [loading, setLoading] = useState(false);
+  const [columnFilters, setColumnFilters] = useState<MRT_ColumnFiltersState>(
+    [],
+  );
+  const [sorting, setSorting] = useState<MRT_SortingState>([]);
 
   const handleDataLoaded = useCallback(
     (loadedData: Listing[], headers: string[]) => {
@@ -117,6 +123,9 @@ export function ListingsTable() {
 
       setColumns(newColumns);
       setData(loadedData);
+      // reset filters & sorting on new data load
+      setColumnFilters([]);
+      setSorting([]);
       setLoading(false);
     },
     [],
@@ -136,7 +145,15 @@ export function ListingsTable() {
             columns={columns}
             data={data}
             enableRowNumbers
-            state={{ showProgressBars: loading }}
+            manualFiltering={false}
+            manualSorting={false}
+            onColumnFiltersChange={setColumnFilters}
+            onSortingChange={setSorting}
+            state={{
+              columnFilters,
+              sorting,
+              showProgressBars: loading,
+            }}
             initialState={{ density: "xs" }}
           />
         </>
