@@ -19,7 +19,11 @@ export function ThemeToolbar() {
     <Paper
       radius={0}
       p="xs"
-      style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}
+      style={{
+        borderBottom: "1px solid var(--mantine-color-default-border)",
+        width: "90%",
+        margin: "0 auto",
+      }}
     >
       <Group justify="space-between" px="md">
         <Group>
