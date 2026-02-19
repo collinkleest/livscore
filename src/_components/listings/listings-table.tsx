@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   MantineReactTable,
   type MRT_ColumnDef,
@@ -6,8 +6,17 @@ import {
   type MRT_ColumnFiltersState,
   type MRT_SortingState,
 } from "mantine-react-table";
-import { Badge, Container, Title, Text, Anchor } from "@mantine/core";
+import {
+  Badge,
+  Container,
+  Title,
+  Text,
+  Anchor,
+  ActionIcon,
+} from "@mantine/core";
+import { IconHeart, IconHeartOff } from "@tabler/icons-react";
 import { CsvUpload } from "./csv-upload";
+import { FavoritesTable } from "./favorites-table";
 import { formatCurrency, detectColumnType, sanitizeKey } from "./helpers";
 import type { Listing } from "./helpers";
 
@@ -30,16 +39,46 @@ export function ListingsTable() {
     [],
   );
   const [sorting, setSorting] = useState<MRT_SortingState>([]);
+  const [favorites, setFavorites] = useState<Listing[]>(() => {
+    const stored = localStorage.getItem("livscore_favorites");
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        console.warn("Failed to parse favorites from localStorage:", e);
+      }
+    }
+    return [];
+  });
+  const [allHeaders, setAllHeaders] = useState<string[]>([]);
 
-  const handleDataLoaded = useCallback(
-    (loadedData: Listing[], headers: string[]) => {
-      console.log("Data loaded from CSV:", loadedData);
-      console.log("Headers:", headers);
-      setLoading(true);
+  // Save favorites to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem("livscore_favorites", JSON.stringify(favorites));
+  }, [favorites]);
 
-      // Build column definitions for all headers so the data remains available,
-      // but we'll compute a visibility map to hide everything except the desired columns.
-      const desired = new Set(
+  const toggleFavorite = useCallback((listing: Listing) => {
+    setFavorites((prev) => {
+      const exists = prev.some(
+        (fav) => JSON.stringify(fav) === JSON.stringify(listing),
+      );
+      if (exists) {
+        return prev.filter(
+          (fav) => JSON.stringify(fav) !== JSON.stringify(listing),
+        );
+      } else {
+        return [...prev, listing];
+      }
+    });
+  }, []);
+
+  const removeFavorite = useCallback((index: number) => {
+    setFavorites((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const desired = useMemo(
+    () =>
+      new Set(
         [
           "price",
           "short address",
@@ -49,58 +88,98 @@ export function ListingsTable() {
           "price per sq. ft.",
           "url",
         ].map((s) => s.toLowerCase()),
-      );
+      ),
+    [],
+  );
+
+  const handleDataLoaded = useCallback(
+    (loadedData: Listing[], headers: string[]) => {
+      console.log("Data loaded from CSV:", loadedData);
+      console.log("Headers:", headers);
+      setLoading(true);
 
       const headerMap = new Map<string, string>();
       for (const h of headers) headerMap.set(String(h).toLowerCase(), h);
 
-      const allColumns: MRT_ColumnDef<Listing>[] = headers.map((header) => {
-        const type = detectColumnType(header, loadedData.slice(0, 50));
-        const safeKey = sanitizeKey(header);
+      // Store headers for the favorites table
+      setAllHeaders(headers);
 
-        return {
-          accessorKey: safeKey,
-          header: header,
-          accessorFn: (row: Listing) => row[header as string],
-          filterVariant:
-            type === "number" || type === "currency" ? "range" : "text",
-          Cell: ({ cell }: { cell: MRT_Cell<Listing> }) => {
-            const val = cell.getValue<string | number>();
-            if (val === null || val === undefined) return "";
+      const allColumns: MRT_ColumnDef<Listing>[] = [
+        {
+          accessorKey: "favorite",
+          header: "❤️",
+          enableSorting: false,
+          enableColumnFilter: false,
+          size: 50,
+          Cell: ({ row }: { row: { original: Listing } }) => {
+            const isFav = favorites.some(
+              (fav) => JSON.stringify(fav) === JSON.stringify(row.original),
+            );
+            return (
+              <ActionIcon
+                variant="subtle"
+                color={isFav ? "red" : "gray"}
+                onClick={() => toggleFavorite(row.original)}
+              >
+                {isFav ? <IconHeart size={18} /> : <IconHeartOff size={18} />}
+              </ActionIcon>
+            );
+          },
+        },
+        ...headers.map((header) => {
+          const type = detectColumnType(header, loadedData.slice(0, 50));
+          const safeKey = sanitizeKey(header);
 
-            if (type === "url") {
-              const urlStr = String(val).trim();
-              return (
-                <Anchor href={urlStr} target="_blank" rel="noopener noreferrer">
-                  Link
-                </Anchor>
-              );
-            }
+          return {
+            accessorKey: safeKey,
+            header: header,
+            accessorFn: (row: Listing) => row[header as string],
+            filterVariant:
+              type === "number" || type === "currency"
+                ? ("range" as const)
+                : ("text" as const),
+            Cell: ({ cell }: { cell: MRT_Cell<Listing> }) => {
+              const val = cell.getValue<string | number>();
+              if (val === null || val === undefined) return "";
 
-            if (type === "currency") {
-              const num = Number(String(val).replace(/[$,]/g, ""));
-              if (!isNaN(num)) {
+              if (type === "url") {
+                const urlStr = String(val).trim();
                 return (
-                  <Badge color="green" variant="light">
-                    {formatCurrency(num)}
-                  </Badge>
+                  <Anchor
+                    href={urlStr}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Link
+                  </Anchor>
                 );
               }
-            }
 
-            if (type === "date") {
-              try {
-                return new Date(String(val)).toLocaleDateString();
-              } catch (e) {
-                console.warn("Failed to parse date:", e);
-                return String(val);
+              if (type === "currency") {
+                const num = Number(String(val).replace(/[$,]/g, ""));
+                if (!isNaN(num)) {
+                  return (
+                    <Badge color="green" variant="light">
+                      {formatCurrency(num)}
+                    </Badge>
+                  );
+                }
               }
-            }
 
-            return String(val);
-          },
-        };
-      });
+              if (type === "date") {
+                try {
+                  return new Date(String(val)).toLocaleDateString();
+                } catch (e) {
+                  console.warn("Failed to parse date:", e);
+                  return String(val);
+                }
+              }
+
+              return String(val);
+            },
+          };
+        }),
+      ];
 
       // If we can detect both a price and a sqft column, add a derived "Price / sqft" column
       // Better detection for price and sqft-like columns:
@@ -187,12 +266,14 @@ export function ListingsTable() {
       setColumns(allColumns);
       setInitialColumnVisibility(columnVisibility);
       setData(loadedData);
+      // Save favorites whenever data changes
+      localStorage.setItem("livscore_favorites", JSON.stringify(favorites));
       // reset filters & sorting on new data load
       setColumnFilters([]);
       setSorting([]);
       setLoading(false);
     },
-    [],
+    [favorites, toggleFavorite, desired],
   );
 
   return (
@@ -205,6 +286,23 @@ export function ListingsTable() {
         House Scoring & Analysis
       </Title>
 
+      {favorites.length > 0 && allHeaders.length > 0 && (
+        <>
+          <Title order={3} mb="md" mt="lg">
+            ❤️ Favorite Listings ({favorites.length})
+          </Title>
+          <FavoritesTable
+            favorites={favorites}
+            onRemove={removeFavorite}
+            allHeaders={allHeaders}
+            desired={desired}
+          />
+        </>
+      )}
+
+      <Title order={3} mb="md" mt="lg">
+        Upload Listings CSV
+      </Title>
       <CsvUpload onDataLoaded={handleDataLoaded} />
 
       {data.length > 0 ? (
