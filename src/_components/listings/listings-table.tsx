@@ -6,7 +6,7 @@ import {
   type MRT_ColumnFiltersState,
   type MRT_SortingState,
 } from "mantine-react-table";
-import { Badge, Container, Title, Text } from "@mantine/core";
+import { Badge, Container, Title, Text, Anchor } from "@mantine/core";
 import { CsvUpload } from "./csv-upload";
 import { formatCurrency, detectColumnType, sanitizeKey } from "./helpers";
 import type { Listing } from "./helpers";
@@ -47,6 +47,7 @@ export function ListingsTable() {
           "baths",
           "footage",
           "price per sq. ft.",
+          "url",
         ].map((s) => s.toLowerCase()),
       );
 
@@ -66,6 +67,15 @@ export function ListingsTable() {
           Cell: ({ cell }: { cell: MRT_Cell<Listing> }) => {
             const val = cell.getValue<string | number>();
             if (val === null || val === undefined) return "";
+
+            if (type === "url") {
+              const urlStr = String(val).trim();
+              return (
+                <Anchor href={urlStr} target="_blank" rel="noopener noreferrer">
+                  Link
+                </Anchor>
+              );
+            }
 
             if (type === "currency") {
               const num = Number(String(val).replace(/[$,]/g, ""));
@@ -164,11 +174,13 @@ export function ListingsTable() {
       }
 
       // Build column visibility: show only desired columns (by original header name),
-      // and show the derived column if present.
+      // and show all URL columns and the derived column if present.
       const columnVisibility: Record<string, boolean> = {};
       for (const h of headers) {
         const safe = sanitizeKey(h);
-        columnVisibility[safe] = desired.has(String(h).toLowerCase());
+        const type = detectColumnType(h, loadedData.slice(0, 50));
+        columnVisibility[safe] =
+          desired.has(String(h).toLowerCase()) || type === "url";
       }
       if (derivedSafeKey) columnVisibility[derivedSafeKey] = true;
 

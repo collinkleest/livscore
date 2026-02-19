@@ -17,10 +17,11 @@ export const formatCurrency = (value: number) => {
 export const detectColumnType = (
   header: string,
   sampleData: Listing[],
-): "currency" | "number" | "date" | "string" => {
+): "currency" | "number" | "date" | "url" | "string" => {
   let isCurrency = true;
   let isNumber = true;
   let isDate = true;
+  let isUrl = true;
 
   let samplesChecked = 0;
 
@@ -30,6 +31,11 @@ export const detectColumnType = (
     samplesChecked++;
 
     const strVal = String(val).trim();
+
+    // Check URL
+    if (!/^https?:\/\/.+/.test(strVal)) {
+      isUrl = false;
+    }
 
     // Check currency
     if (!/^\$?\s?[\d,]+(\.\d+)?$/.test(strVal)) {
@@ -49,6 +55,7 @@ export const detectColumnType = (
 
   if (samplesChecked === 0) return "string";
 
+  if (isUrl) return "url";
   if (isCurrency && header.toLowerCase().includes("price")) return "currency";
   if (isNumber) return "number";
   if (isDate) return "date";
